@@ -4,53 +4,84 @@
 #include <opencv2/opencv.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
-static const char cv_wnd_name[] = "Ghost Face";
+char cv_wnd_name[32] = "Ghost Face";
+char cv_frontalface_xml[256] = "../haarcascade_frontalface_alt2.xml";
 
-void extractImageFeature(IplImage *image, CvHaarClassifierCascade* cascade, int do_pyramids = 1) {
-	IplImage* small_image= image;
-	CvMemStorage* storage= cvCreateMemStorage(0);
-	CvSeq* faces;
-	int i, scale = 1;
-	if(do_pyramids)
-	{
-		small_image = cvCreateImage(cvSize(image->width/ 2, image->height / 2),IPL_DEPTH_8U, 3);
-		cvPyrDown(image, small_image, CV_GAUSSIAN_5x5);
-		scale = 2;
+CvMemStorage* cv_mem_storage = nullptr;
+CvCapture* cv_capture = nullptr;
+IplImage* cv_pFrame = nullptr;
+IplImage* cv_small_image = nullptr;
+CvHaarClassifierCascade* cv_cascade = nullptr;
+int cv_scale = 1; // TODO: remove it, because it's redundant
+CvSeq* cv_faces = nullptr;
+
+void _init() {
+	cvNamedWindow(cv_wnd_name, 1);
+	cv_mem_storage = cvCreateMemStorage(0);
+	cv_cascade = (CvHaarClassifierCascade*) cvLoad(cv_frontalface_xml);
+
+	// cv_capture = cvCreateCameraCapture(-1); // 获取任一摄像头
+	cv_capture = cvCreateFileCapture ("../test1.mp4");
+}
+
+void _delete() {
+	if (cv_small_image != nullptr && cv_small_image != cv_pFrame) {
+		cvReleaseImage(&cv_small_image);
 	}
-	faces = cvHaarDetectObjects(small_image, cascade, storage, 1.2, 2, CV_HAAR_DO_CANNY_PRUNING);
-	for(i = 0; i < faces->total; i ++)
-	{
-		CvRect face_rect = *(CvRect*)cvGetSeqElem(faces, i);
-		cvRectangle(image, cvPoint(face_rect.x * scale, face_rect.y* scale),
-			cvPoint((face_rect.x+ face_rect.width) * scale, (face_rect.y + face_rect.height) *scale),
-			CV_RGB(255, 0,0), 3);
+	cvReleaseCapture(&cv_capture);
+	cvReleaseHaarClassifierCascade(&cv_cascade);
+	cvReleaseMemStorage(&cv_mem_storage);
+	cv_mem_storage = nullptr;
+	cvDestroyWindow(cv_wnd_name);
+}
+
+IplImage* getSmallImage(bool do_pyramids = true) {
+	if (do_pyramids) {
+		if (cv_small_image == nullptr) { // TODO: judge if the size is matched
+			cv_small_image = cvCreateImage(cvSize(cv_pFrame->width/ 2, cv_pFrame->height / 2), IPL_DEPTH_8U, 3);
+		}
+		cvPyrDown(cv_pFrame, cv_small_image, CV_GAUSSIAN_5x5);
+		cv_scale = 2;
+		return cv_small_image;
+
+	} else {
+		cv_scale = 1;
+		return cv_pFrame;
 	}
-	if(small_image != image)
-	{
-		cvReleaseImage(&small_image);
+}
+	
+void extractImageFeatureWithCond(bool do_pyramids) {
+	cvClearMemStorage(cv_mem_storage);
+	cv_faces = cvHaarDetectObjects(getSmallImage(do_pyramids), cv_cascade, cv_mem_storage
+		, 1.2, 2, CV_HAAR_DO_CANNY_PRUNING);
+}	
+
+void extractImageFeatureWithPyramids() {
+	extractImageFeatureWithCond(true);
+}
+
+void drawFaceRects() {
+	for (int i = 0; i < cv_faces->total; ++i) {
+		CvRect &face_rect = * (CvRect *) cvGetSeqElem(cv_faces, i);
+		cvRectangle(cv_pFrame, cvPoint(face_rect.x * cv_scale, face_rect.y * cv_scale),
+			cvPoint((face_rect.x + face_rect.width) * cv_scale, (face_rect.y + face_rect.height) * cv_scale),
+			CV_RGB(255, 0, 0), 3);
 	}
-	cvReleaseMemStorage(&storage);
 }
 
 int main(int argc, char* argv[]) {
-	IplImage* pFrame = nullptr;
-	cvNamedWindow(cv_wnd_name, 1); // 创建窗口
-	// CvCapture* pCapture = cvCreateCameraCapture(-1); // 获取任意摄像头
-	CvCapture* pCapture = cvCreateFileCapture ("../test1.mp4");
-	auto* cascade = (CvHaarClassifierCascade*) cvLoad("../haarcascade_frontalface_alt2.xml");
+	_init();
 	
-	while(1) {
-		pFrame = cvQueryFrame(pCapture);
-		if (!pFrame)
-			break;
-		extractImageFeature(pFrame, cascade);
-		cvShowImage(cv_wnd_name, pFrame);
-		char c = cvWaitKey(10);
+	while(cv_pFrame = cvQueryFrame(cv_capture)) {
+		extractImageFeatureWithPyramids();
+		drawFaceRects();
+		cvShowImage(cv_wnd_name, cv_pFrame);
+
+		const char c = cvWaitKey(20);
 		if (c == 27) // Esc
 			break;
 	}
 
-	cvReleaseCapture(&pCapture);
-	cvDestroyWindow(cv_wnd_name);
+	_delete();
 	return 0;
 }

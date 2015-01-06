@@ -49,7 +49,7 @@ IplImage* getSmallImage(bool do_pyramids = true) {
 		return cv_pFrame;
 	}
 }
-	
+
 void extractImageFeatureWithCond(bool do_pyramids) {
 	cvClearMemStorage(cv_mem_storage);
 	cv_faces = cvHaarDetectObjects(getSmallImage(do_pyramids), cv_cascade, cv_mem_storage
@@ -69,19 +69,63 @@ void drawFaceRects() {
 	}
 }
 
-int main(int argc, char* argv[]) {
-	_init();
-	
-	while(cv_pFrame = cvQueryFrame(cv_capture)) {
-		extractImageFeatureWithPyramids();
-		drawFaceRects();
-		cvShowImage(cv_wnd_name, cv_pFrame);
+#include "gl/glut.h"
 
-		const char c = cvWaitKey(20);
-		if (c == 27) // Esc
-			break;
+static void onKeyboard(unsigned char key, int x, int y)
+{
+	switch (key) {
+	case 27:
+		exit(0);
+		break;
+	case 26: /*<c-z>*/
+		/*no break*/
+	case 3: /*<c-c>*/
+		if (glutGetModifiers() == GLUT_ACTIVE_CTRL) {
+			exit(0);
+		}
+		break;
+	default:
+		printf("%d ", key);
+		break;
 	}
+}
 
-	_delete();
+
+int main(int argc, char* argv[]) {
+	glutInit(&argc, argv);
+	extern const char* filedir_3ds;
+	filedir_3ds = "../model1/";
+	extern int load3dsModel(const char *model_file_name);
+	load3dsModel("ZKX.3ds");
+
+	//_init();
+	//
+	//while(cv_pFrame = cvQueryFrame(cv_capture)) {
+	//	extractImageFeatureWithPyramids();
+	//	drawFaceRects();
+	//	cvShowImage(cv_wnd_name, cv_pFrame);
+
+	//	const char c = cvWaitKey(20);
+	//	if (c == 27) // Esc
+	//		break;
+	//}
+	glutInitDisplayMode(GLUT_DEPTH | GLUT_RGB | GLUT_DOUBLE);
+	glutInitWindowSize(500, 500);
+	glutInitWindowPosition(200, 100);
+	glutCreateWindow(argv[0]);
+
+	glutKeyboardFunc(onKeyboard);
+
+	extern void init3dsGL(void);
+	init3dsGL();
+	extern void display3dsModel(void);
+	glutDisplayFunc(display3dsModel);
+	extern void gl_onReshape (int w, int h);
+	glutReshapeFunc(gl_onReshape);
+
+	glutMainLoop();
+
+
+	//_delete();
 	return 0;
 }
